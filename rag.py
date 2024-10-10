@@ -9,6 +9,8 @@ from langchain.retrievers.multi_query import MultiQueryRetriever
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 
+PERSIST_DIR = "chroma_db"
+
 def load_and_split_document(file_path: str, chunk_size: int = 1000, chunk_overlap: int = 200):
     # load pdf file
     loader = UnstructuredPDFLoader(file_path=file_path)
@@ -21,13 +23,23 @@ def load_and_split_document(file_path: str, chunk_size: int = 1000, chunk_overla
     return chunks
 
 def initialize_vector_store(chunks, embedding_model, collection_name="rag-chroma"):
-    # convert chunks into embeddings and store in vector database
-    vectordb = Chroma.from_documents(
-        documents = chunks,
-        collection_name = collection_name,
-        embedding = OllamaEmbeddings(model=embedding_model, show_progress=True)
-    )
-
+    # Check if the vector database already exists
+    if os.path.exists(PERSIST_DIR):
+        # Load existing vector database from the specified directory
+        vectordb = Chroma(
+            persist_directory=PERSIST_DIR,
+            collection_name=collection_name,
+            embedding=OllamaEmbeddings(model=embedding_model, show_progress=True)
+        )
+    else:
+        # Create a new vector database from documents and persist it
+        vectordb = Chroma.from_documents(
+            documents=chunks,
+            collection_name=collection_name,
+            embedding=OllamaEmbeddings(model=embedding_model, show_progress=True),
+            persist_directory=PERSIST_DIR  # Persist directory for storage
+        )
+        vectordb.persist()  # Save the new vector database to disk
     return vectordb
 
 def initialize_retriever(vectordb, llm):
@@ -72,9 +84,17 @@ def main():
     local_path = os.path.join(data_dir, 'time-management.pdf')
     embedding_model = 'nomic-embed-text'
 
-    # load and split document
-    chunks = load_and_split_document(file_path=local_path)
-    vectordb = initialize_vector_store(chunks, embedding_model)
+    if not os.path.exists(PERSIST_DIR):
+        print("Loading and splitting document...")
+        chunks = load_and_split_document(file_path=local_path)
+        vectordb = initialize_vector_store(chunks, embedding_model)
+    else:
+        print("Loading existing vector database...")
+        vectordb = Chroma(
+            persist_directory=PERSIST_DIR,
+            collection_name="rag-chroma",
+            embedding_function=OllamaEmbeddings(model=embedding_model, show_progress=True)
+        )
 
     # initialize model
     llm = ChatOllama(model="mistral")
