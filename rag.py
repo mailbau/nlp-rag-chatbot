@@ -29,7 +29,7 @@ def initialize_vector_store(chunks, embedding_model, collection_name="rag-chroma
         vectordb = Chroma(
             persist_directory=PERSIST_DIR,
             collection_name=collection_name,
-            embedding=OllamaEmbeddings(model=embedding_model, show_progress=True)
+            embedding_function=OllamaEmbeddings(model=embedding_model, show_progress=True)
         )
     else:
         # Create a new vector database from documents and persist it
@@ -62,7 +62,8 @@ def initialize_retriever(vectordb, llm):
     return retriever
 
 def setup_rag_chain(retriever, llm):
-    after_rag_template = """Answer the question based only on the following context:
+    after_rag_template = """Use the following pieces of context to answer the question at the end. 
+    When you don't know the answer, say that you don't know, don't make things up.
     {context}
     Question: {question}
     """
